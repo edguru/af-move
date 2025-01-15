@@ -1,27 +1,26 @@
-# Move Cult AI Framework
+# Movement Labs AI Assistant
 
-A comprehensive AI framework for managing Movement Labs' social media presence and community engagement, powered by the Crew AI framework.
+An AI-powered assistant for Movement Labs that provides technical support through Telegram and manages social media presence on Twitter.
 
 ## Features
 
-- **Twitter Agent**: A personality-driven agent that generates engaging content and manages interactions on Twitter
-- **Idea Generator**: Processes trends and generates content ideas, storing them in an organized Excel file
-- **Telegram Agent**: A documentation assistant using RAG (Retrieval-Augmented Generation) and LanceDB for accurate responses
-- **Utilities**: Document processing and configuration management
+- **Telegram Support Bot**:
+  - Direct message support for technical queries
+  - Context-aware conversations
+  - Powered by RAG system using Movement Labs documentation
+  - Maintains conversation history for better responses
 
-## Prerequisites
-
-- Python 3.10 or higher
-- Virtual environment (recommended)
-- Twitter Developer Account with API access
-- Telegram Bot Token
-- OpenAI API Key
+- **Twitter Automation** (Production Mode):
+  - Auto-retweets Movement Labs tweets
+  - Responds to mentions and comments
+  - Generates and posts regular content
+  - Monitors trends and engagement
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
+git clone https://github.com/your-org/move-cult-ai.git
 cd move-cult-ai
 ```
 
@@ -36,79 +35,114 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Set up environment variables:
-Create a `.env` file in the root directory with:
-```
-OPENAI_API_KEY=your_openai_api_key
-TWITTER_API_KEY=your_twitter_api_key
-TWITTER_API_SECRET=your_twitter_api_secret
-TWITTER_ACCESS_TOKEN=your_twitter_access_token
-TWITTER_ACCESS_TOKEN_SECRET=your_twitter_access_token_secret
-TWITTER_BEARER_TOKEN=your_twitter_bearer_token
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token
-TELEGRAM_GROUP_ID=your_telegram_group_id
+4. Copy the example environment file and fill in your credentials:
+```bash
+cp .env.example .env
 ```
 
-## Project Structure
+## Configuration
 
+Edit the `.env` file with your credentials:
+
+```env
+# OpenAI API Key
+OPENAI_API_KEY=your_openai_api_key_here
+
+# Twitter API Keys
+TWITTER_API_KEY=your_twitter_api_key_here
+TWITTER_API_SECRET=your_twitter_api_secret_here
+TWITTER_ACCESS_TOKEN=your_twitter_access_token_here
+TWITTER_ACCESS_TOKEN_SECRET=your_twitter_access_token_secret_here
+TWITTER_BEARER_TOKEN=your_twitter_bearer_token_here
+
+# Twitter Account IDs
+MOVEMENT_TWITTER_ID=movement_labs_account_id_here
+BOT_TWITTER_ID=bot_account_id_here
+
+# Twitter Automation Intervals (in hours)
+TREND_FETCH_INTERVAL=12
+TWEET_POST_INTERVAL=24
+INTERACTION_CHECK_INTERVAL=4
+
+# Telegram Configuration
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+
+# Test Mode Configuration
+TEST_MODE=false
 ```
-move-cult-ai/
-├── src/
-│   ├── agents/
-│   │   ├── idea_generator.py
-│   │   └── telegram_agent.py
-│   ├── config/
-│   │   └── settings.py
-│   └── utils/
-│       └── doc_processor.py
-├── data/
-│   └── vector_db/
-├── requirements.txt
-├── README.md
-└── .env
+
+## Running the Bot
+
+### Test Mode
+Run in test mode to test functionality without Twitter integration:
+```bash
+TEST_MODE=true python src/main.py
 ```
 
-## Usage
+In test mode:
+- Only Telegram bot is active
+- No Twitter posting/interaction
+- Can test tweet generation via `/generate_tweet` command
 
-1. Start the Telegram bot and Twitter agent:
+### Production Mode
+Run in production mode for full functionality:
 ```bash
 python src/main.py
 ```
 
-The framework will:
-- Generate and post tweets every 24 hours
-- Monitor and respond to Twitter mentions
-- Listen for and respond to Telegram messages in the specified group
-- Process and store documentation for accurate responses
+In production mode:
+- Telegram bot handles user support
+- Twitter automation is active
+- All social media features are enabled
 
-## Agents
+## Documentation Sources
 
-### Twitter Agent
-- Generates engaging content about Movement Labs and Move Language
-- Posts tweets on a schedule
-- Monitors and responds to mentions
-- Tracks relevant hashtags and topics
+The bot uses documentation from:
+1. [Movement Docs](https://github.com/movementlabsxyz/movement-docs)
+2. [MIP Repository](https://github.com/movementlabsxyz/MIP)
+3. [Developer Portal](https://github.com/movementlabsxyz/developer-portal)
 
-### Idea Generator
-- Analyzes Twitter trends
-- Generates content ideas based on current discussions
-- Maintains an organized repository of unused ideas
-- Tracks used ideas to prevent duplication
+## Architecture
 
-### Telegram Agent
-- Uses RAG for accurate documentation-based responses
-- Maintains a vector database of documentation
-- Provides helpful responses to technical questions
-- Monitors group chat for queries
+### Components
+
+1. **DocProcessor**: 
+   - Fetches and processes documentation
+   - Handles markdown parsing and chunking
+   - Manages vector database indexing
+
+2. **TelegramAgent**:
+   - Handles user interactions
+   - Maintains conversation context
+   - Uses RAG for accurate responses
+
+3. **Twitter Automation**:
+   - Manages social media presence
+   - Handles interactions and content generation
+   - Monitors trends and engagement
+
+## Development
+
+### Adding New Documentation Sources
+
+1. Add repository URL to `GITHUB_REPOS` in `config/settings.py`
+2. Update `DOC_PATHS` if documents are in a specific directory
+3. Run the bot to reindex documentation
+
+### Customizing Response Behavior
+
+1. Adjust settings in `config/settings.py`:
+   - `CHUNK_SIZE`: Size of document chunks
+   - `MAX_DOCS_PER_QUERY`: Number of relevant docs to retrieve
+   - `CHAT_CONTEXT_EXPIRY_HOURS`: How long to maintain chat context
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
+3. Make your changes
+4. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+MIT License - See LICENSE file for details 

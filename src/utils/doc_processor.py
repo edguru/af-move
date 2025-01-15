@@ -1,132 +1,172 @@
 """
-DocProcessor: Utility class for fetching and processing documentation from GitHub repositories.
+Document processor for fetching and processing Movement Labs documentation.
 """
 
 import os
-import requests
-import base64
-from typing import List, Dict
 from pathlib import Path
+from typing import List, Dict
+from langchain.text_splitter import MarkdownTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+import tempfile
+import shutil
+import lancedb
+import json
+import subprocess
 
 class DocProcessor:
-    def __init__(self, repo_url: str):
-        """
-        Initialize with a GitHub repository URL.
+    def __init__(self, repo_url: str, branch: str = "main"):
+        self.repo_url = repo_url
+        self.branch = branch
+        self.embeddings = OpenAIEmbeddings()
+        self.text_splitter = MarkdownTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=100
+        )
         
-        Args:
-            repo_url: Full URL to the GitHub repository
-        """
-        self.api_url = self._convert_to_api_url(repo_url)
+    def _clone_repo(self) -> str:
+        """Clone repository to temporary directory."""
+        temp_dir = tempfile.mkdtemp()
+        try:
+            # Use git clone command through subprocess
+            result = subprocess.run(
+                ["git", "clone", "--depth", "1", self.repo_url, temp_dir],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                return temp_dir
+            else:
+                print(f"Error cloning repository {self.repo_url}: {result.stderr}")
+                if os.path.exists(temp_dir):
+                    shutil.rmtree(temp_dir)
+                return None
+        except Exception as e:
+            print(f"Error cloning repository {self.repo_url}: {e}")
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+            return None
         
-    def _convert_to_api_url(self, repo_url: str) -> str:
-        """Convert GitHub URL to API URL."""
-        # Example: https://github.com/owner/repo -> https://api.github.com/repos/owner/repo
-        parts = repo_url.split('github.com/')
-        if len(parts) != 2:
-            raise ValueError("Invalid GitHub URL")
-            
-        return f"https://api.github.com/repos/{parts[1]}"
-        
-    def fetch_docs(self, path: str = "docs/") -> List[Dict[str, str]]:
-        """
-        Fetch documentation files from a specified path in the repository.
-        
-        Args:
-            path: Path to documentation directory
-            
-        Returns:
-            List of dicts with 'text' and 'source' keys
-        """
+    def _process_markdown_files(self, repo_dir: str) -> List[Dict]:
+        """Process markdown files in repository."""
         documents = []
         
-        # Get contents of path
-        response = requests.get(f"{self.api_url}/contents/{path}")
-        if response.status_code != 200:
-            raise Exception(f"Failed to fetch contents: {response.text}")
+        if not repo_dir:
+            return documents
             
-        contents = response.json()
-        
-        # Process each item
-        for item in contents:
-            if item['type'] == 'file' and self._is_doc_file(item['name']):
-                content = self._fetch_file_content(item['download_url'])
-                documents.append({
-                    'text': content,
-                    'source': f"{path}/{item['name']}"
-                })
-            elif item['type'] == 'dir':
-                # Recursively process subdirectories
-                sub_docs = self.fetch_docs(f"{path}/{item['name']}")
-                documents.extend(sub_docs)
-                
+        for root, _, files in os.walk(repo_dir):
+            for file in files:
+                if file.endswith('.md'):
+                    file_path = os.path.join(root, file)
+                    try:
+                        # Read markdown file directly
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                            
+                        # Split into chunks
+                        chunks = self.text_splitter.split_text(content)
+                        
+                        # Add metadata
+                        for chunk in chunks:
+                            relative_path = os.path.relpath(file_path, repo_dir)
+                            metadata = {
+                                'source': self.repo_url,
+                                'file': relative_path,
+                                'repo': self.repo_url.split('/')[-1]
+                            }
+                            documents.append({
+                                'text': chunk,
+                                'metadata': metadata
+                            })
+                            
+                    except Exception as e:
+                        print(f"Error processing {file_path}: {e}")
+                        
         return documents
         
-    def _is_doc_file(self, filename: str) -> bool:
-        """Check if a file is a documentation file."""
-        doc_extensions = {'.md', '.mdx', '.txt', '.rst'}
-        return any(filename.endswith(ext) for ext in doc_extensions)
-        
-    def _fetch_file_content(self, url: str) -> str:
-        """Fetch and decode file content."""
-        response = requests.get(url)
-        if response.status_code != 200:
-            raise Exception(f"Failed to fetch file: {response.text}")
-            
-        return response.text
-        
-    def save_docs_locally(self, documents: List[Dict[str, str]], output_dir: str = "data/docs"):
-        """
-        Save fetched documents to local directory.
-        
-        Args:
-            documents: List of document dicts
-            output_dir: Directory to save files
-        """
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        
-        for doc in documents:
-            # Create safe filename from source
-            filename = doc['source'].replace('/', '_')
-            filepath = os.path.join(output_dir, filename)
-            
-            # Save content
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(doc['text'])
+    def fetch_docs(self) -> List[Dict]:
+        """Fetch and process documentation from repository."""
+        temp_dir = None
+        try:
+            # Clone repository
+            temp_dir = self._clone_repo()
+            if not temp_dir:
+                return []
                 
-    @staticmethod
-    def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
-        """
-        Split text into overlapping chunks.
-        
-        Args:
-            text: Text to split
-            chunk_size: Maximum size of each chunk
-            overlap: Number of characters to overlap between chunks
+            # Process markdown files
+            documents = self._process_markdown_files(temp_dir)
             
-        Returns:
-            List of text chunks
-        """
-        chunks = []
-        start = 0
-        
-        while start < len(text):
-            # Find end of chunk
-            end = start + chunk_size
-            
-            # Adjust end to not split words
-            if end < len(text):
-                # Find next space after chunk_size
-                while end < len(text) and not text[end].isspace():
-                    end += 1
+            # Ensure we have valid documents
+            if not documents:
+                print(f"No valid documents found in repository: {self.repo_url}")
+                return []
+                
+            # Validate document structure
+            valid_documents = []
+            for doc in documents:
+                if isinstance(doc, dict) and 'text' in doc and 'metadata' in doc:
+                    valid_documents.append(doc)
+                else:
+                    print(f"Invalid document structure found in repository: {self.repo_url}")
                     
-            chunk = text[start:end]
-            chunks.append(chunk)
+            return valid_documents
             
-            # Move start position for next chunk
-            start = end - overlap
+        except Exception as e:
+            print(f"Error fetching documents from {self.repo_url}: {e}")
+            return []
             
-            # Adjust start to not split words
-            while start < len(text) and not text[start].isspace():
-                start += 1
+        finally:
+            # Cleanup temporary directory
+            if temp_dir and os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
                 
-        return chunks 
+    def save_docs_locally(self, documents: List[Dict], output_dir: str = "data/docs"):
+        """Save processed documents locally."""
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Group documents by repository
+        docs_by_repo = {}
+        for doc in documents:
+            repo = doc['metadata']['repo']
+            if repo not in docs_by_repo:
+                docs_by_repo[repo] = []
+            docs_by_repo[repo].append(doc)
+            
+        # Save each repository's documents
+        for repo, docs in docs_by_repo.items():
+            repo_file = output_path / f"{repo}.json"
+            with open(repo_file, 'w', encoding='utf-8') as f:
+                json.dump(docs, f, indent=2, ensure_ascii=False)
+                
+    def index_documents(self, documents: List[Dict], vector_db_path: str):
+        """Index documents in vector database."""
+        # Create or get table
+        db = lancedb.connect(vector_db_path)
+        
+        # Prepare data for indexing
+        data = []
+        for doc in documents:
+            # Get embedding for the document
+            embedding = self.embeddings.embed_query(doc['text'])
+            
+            # Add to data list
+            data.append({
+                "text": doc['text'],
+                "metadata": json.dumps(doc['metadata']),  # Convert metadata to string
+                "vector": embedding
+            })
+            
+        try:
+            # Try to open existing table
+            table = db.open_table("documents")
+            # Add new documents
+            table.add(data)
+        except Exception:
+            # Create new table if it doesn't exist
+            table = db.create_table(
+                "documents",
+                data=data,
+                mode="overwrite"
+            )
+            
+        print(f"Indexed {len(data)} documents in vector database") 
