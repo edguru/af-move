@@ -1,0 +1,13 @@
+crewai==0.95.0
+openai==1.59.7
+python-dotenv==1.0.1
+tweepy==4.14.0
+pandas==2.2.3
+openpyxl==3.1.5
+lancedb==0.18.0
+chromadb==0.6.3
+requests==2.32.3
+numpy==2.2.1
+pydantic==2.10.5
+python-dateutil==2.9.0
+python-telegram-bot==20.8 
